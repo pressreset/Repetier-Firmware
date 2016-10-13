@@ -28,7 +28,7 @@ class Commands
 {
 public:
     static void commandLoop();
-    static void checkForPeriodicalActions();
+    static void checkForPeriodicalActions(bool allowNewMoves);
     static void processArc(GCode *com);
     static void processGCode(GCode *com);
     static void processMCode(GCode *com);
@@ -39,7 +39,8 @@ public:
     static void printTemperatures(bool showRaw = false);
     static void setFanSpeed(int speed,bool wait); /// Set fan speed 0..255
     static void changeFeedrateMultiply(int factorInPercent);
-    static void changeFlowateMultiply(int factorInPercent);
+    static void changeFlowrateMultiply(int factorInPercent);
+    static void changeHorizontalRadius(float hradius);
     static void reportPrinterUsage();
     static void emergencyStop();
     static void checkFreeMemory();

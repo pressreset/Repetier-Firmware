@@ -2,6 +2,7 @@
 #define EXTRUDER_H_INCLUDED
 
 #define CELSIUS_EXTRA_BITS 3
+#define VIRTUAL_EXTRUDER 16 // don't change this to more then 16 without modifying the eeprom positions
 
 //#if TEMP_PID
 //extern uint8_t current_extruder_out;
@@ -17,13 +18,16 @@ extern uint8_t manageMonitor;
 #define HTR_DEADTIME 3
 
 #define TEMPERATURE_CONTROLLER_FLAG_ALARM 1
+#define TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL 2 //< Full heating enabled
+#define TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD 4  //< Holding target temperature
+
 /** TemperatureController manages one heater-temperature sensore loop. You can have up to
 4 loops allowing pid/bang bang for up to 3 extruder and the heated bed.
 
 */
 class TemperatureController
 {
-    public:
+public:
     uint8_t pwmIndex; ///< pwm index for output control. 0-2 = Extruder, 3 = Fan, 4 = Heated Bed
     uint8_t sensorType; ///< Type of temperature sensor.
     uint8_t sensorPin; ///< Pin to read extruder temperature.
@@ -49,12 +53,64 @@ class TemperatureController
     float tempArray[4];
 #endif
     uint8_t flags;
+    millis_t lastDecoupleTest;  ///< Last time of decoupling sensor-heater test
+    float  lastDecoupleTemp;  ///< Temperature on last test
+    millis_t decoupleTestPeriod; ///< Time between setting and testing decoupling.
+
 
     void setTargetTemperature(float target);
     void updateCurrentTemperature();
     void updateTempControlVars();
-    inline bool isAlarm() {return flags & TEMPERATURE_CONTROLLER_FLAG_ALARM;}
-    inline void setAlarm(bool on) {if(on) flags |= TEMPERATURE_CONTROLLER_FLAG_ALARM; else flags &= ~TEMPERATURE_CONTROLLER_FLAG_ALARM;}
+    inline bool isAlarm()
+    {
+        return flags & TEMPERATURE_CONTROLLER_FLAG_ALARM;
+    }
+    inline void setAlarm(bool on)
+    {
+        if(on) flags |= TEMPERATURE_CONTROLLER_FLAG_ALARM;
+        else flags &= ~TEMPERATURE_CONTROLLER_FLAG_ALARM;
+    }
+    inline bool isDecoupleFull()
+    {
+        return flags & TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL;
+    }
+    inline bool isDecoupleFullOrHold()
+    {
+        return flags & (TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL | TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD);
+    }
+    inline void setDecoupleFull(bool on)
+    {
+        flags &= ~(TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL | TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD);
+        if(on) flags |= TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL;
+    }
+    inline bool isDecoupleHold()
+    {
+        return flags & TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD;
+    }
+    inline void setDecoupleHold(bool on)
+    {
+        flags &= ~(TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_FULL | TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD);
+        if(on) flags |= TEMPERATURE_CONTROLLER_FLAG_DECOUPLE_HOLD;
+    }
+    inline void startFullDecouple(millis_t &t)
+    {
+        if(isDecoupleFull()) return;
+        lastDecoupleTest = t;
+        lastDecoupleTemp = currentTemperatureC;
+        setDecoupleFull(true);
+    }
+    inline void startHoldDecouple(millis_t &t)
+    {
+        if(isDecoupleHold()) return;
+        if(fabs(currentTemperatureC - targetTemperatureC) + 1 > DECOUPLING_TEST_MAX_HOLD_VARIANCE) return;
+        lastDecoupleTest = t;
+        lastDecoupleTemp = targetTemperatureC;
+        setDecoupleHold(true);
+    }
+    inline void stopDecouple()
+    {
+        setDecoupleFull(false);
+    }
 #if TEMP_PID
     void autotunePID(float temp,uint8_t controllerId,bool storeResult);
 #endif
@@ -63,6 +119,8 @@ class TemperatureController
 class Extruder;
 extern Extruder extruder[];
 
+#define EXTRUDER_FLAG_RETRACTED 1
+
 /** \brief Data to drive one extruder.
 
 This structure contains all definitions for an extruder and all
@@ -70,16 +128,20 @@ current state variables, like current temperature, feeder position etc.
 */
 class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
 {
-    public:
+public:
     static Extruder *current;
 #if FEATURE_DITTO_PRINTING
     static uint8_t dittoMode;
+#endif
+#if MIXING_EXTRUDER > 0
+    static int mixingS; ///< Sum of all weights
+    static uint8_t mixingDir; ///< Direction flag
 #endif
     uint8_t id;
     int32_t xOffset;
     int32_t yOffset;
     float stepsPerMM;        ///< Steps per mm.
-    uint8_t enablePin;          ///< Pin to enable extruder stepper motor.
+    int8_t enablePin;          ///< Pin to enable extruder stepper motor.
 //  uint8_t directionPin; ///< Pin number to assign the direction.
 //  uint8_t stepPin; ///< Pin number for a step.
     uint8_t enableOn;
@@ -97,13 +159,26 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
 #endif
     float advanceL;
     int16_t advanceBacklash;
-#endif
+#endif // USE_ADVANCE
+#if MIXING_EXTRUDER > 0
+    int mixingW;   ///< Weight for this extruder when mixing steps
+    int mixingE;   ///< Cumulated error for this step.
+    int virtualWeights[VIRTUAL_EXTRUDER]; // Virtual extruder weights
+#endif // MIXING_EXTRUDER > 0
     TemperatureController tempControl;
     const char * PROGMEM selectCommands;
     const char * PROGMEM deselectCommands;
     uint8_t coolerSpeed; ///< Speed to use when enabled
     uint8_t coolerPWM; ///< current PWM setting
-
+    float diameter;
+    uint8_t flags;
+#if MIXING_EXTRUDER > 0
+    static void setMixingWeight(uint8_t extr,int weight);
+    static void step();
+    static void unstep();
+    static void setDirection(uint8_t dir);
+    static void enable();
+#else
     /** \brief Sends the high-signal to the stepper for next extruder step.
     Call this function only, if interrupts are disabled.
     */
@@ -118,15 +193,18 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
 #if NUM_EXTRUDER>0
             WRITE(EXT0_STEP_PIN,HIGH);
 #if FEATURE_DITTO_PRINTING
-            if(Extruder::dittoMode) {
+            if(Extruder::dittoMode)
+            {
                 WRITE(EXT1_STEP_PIN,HIGH);
 #if NUM_EXTRUDER > 2
-                if(Extruder::dittoMode > 1) {
+                if(Extruder::dittoMode > 1)
+                {
                     WRITE(EXT2_STEP_PIN,HIGH);
                 }
 #endif
 #if NUM_EXTRUDER > 3
-                if(Extruder::dittoMode > 2) {
+                if(Extruder::dittoMode > 2)
+                {
                     WRITE(EXT3_STEP_PIN,HIGH);
                 }
 #endif
@@ -168,52 +246,55 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
     */
     static inline void unstep()
     {
-#if NUM_EXTRUDER==1
+#if NUM_EXTRUDER == 1
         WRITE(EXT0_STEP_PIN,LOW);
 #else
         switch(Extruder::current->id)
         {
         case 0:
-#if NUM_EXTRUDER>0
+#if NUM_EXTRUDER > 0
             WRITE(EXT0_STEP_PIN,LOW);
 #if FEATURE_DITTO_PRINTING
-            if(Extruder::dittoMode) {
+            if(Extruder::dittoMode)
+            {
                 WRITE(EXT1_STEP_PIN,LOW);
 #if NUM_EXTRUDER > 2
-            if(Extruder::dittoMode > 1) {
-                WRITE(EXT2_STEP_PIN,LOW);
-            }
+                if(Extruder::dittoMode > 1)
+                {
+                    WRITE(EXT2_STEP_PIN,LOW);
+                }
 #endif
 #if NUM_EXTRUDER > 3
-            if(Extruder::dittoMode > 2) {
-                WRITE(EXT3_STEP_PIN,LOW);
+                if(Extruder::dittoMode > 2)
+                {
+                    WRITE(EXT3_STEP_PIN,LOW);
+                }
+#endif // NUM_EXTRUDER > 3
             }
-#endif
-            }
-#endif
-#endif
+#endif // FEATURE_DITTO_PRINTING
+#endif // NUM_EXTRUDER > 0
             break;
-#if defined(EXT1_STEP_PIN) && NUM_EXTRUDER>1
+#if defined(EXT1_STEP_PIN) && NUM_EXTRUDER > 1
         case 1:
             WRITE(EXT1_STEP_PIN,LOW);
             break;
 #endif
-#if defined(EXT2_STEP_PIN) && NUM_EXTRUDER>2
+#if defined(EXT2_STEP_PIN) && NUM_EXTRUDER > 2
         case 2:
             WRITE(EXT2_STEP_PIN,LOW);
             break;
 #endif
-#if defined(EXT3_STEP_PIN) && NUM_EXTRUDER>3
+#if defined(EXT3_STEP_PIN) && NUM_EXTRUDER > 3
         case 3:
             WRITE(EXT3_STEP_PIN,LOW);
             break;
 #endif
-#if defined(EXT4_STEP_PIN) && NUM_EXTRUDER>4
+#if defined(EXT4_STEP_PIN) && NUM_EXTRUDER > 4
         case 4:
             WRITE(EXT4_STEP_PIN,LOW);
             break;
 #endif
-#if defined(EXT5_STEP_PIN) && NUM_EXTRUDER>5
+#if defined(EXT5_STEP_PIN) && NUM_EXTRUDER > 5
         case 5:
             WRITE(EXT5_STEP_PIN,LOW);
             break;
@@ -224,31 +305,53 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
     /** \brief Activates the extruder stepper and sets the direction. */
     static inline void setDirection(uint8_t dir)
     {
-#if NUM_EXTRUDER==1
+#if MIXING_EXTRUDER > 0
+        mixingDir = dir;
+#endif
+#if NUM_EXTRUDER == 1
         if(dir)
-            WRITE(EXT0_DIR_PIN,!EXT0_INVERSE);
+            WRITE(EXT0_DIR_PIN, !EXT0_INVERSE);
         else
-            WRITE(EXT0_DIR_PIN,EXT0_INVERSE);
+            WRITE(EXT0_DIR_PIN, EXT0_INVERSE);
 #else
         switch(Extruder::current->id)
         {
-#if NUM_EXTRUDER>0
+#if NUM_EXTRUDER > 0
         case 0:
             if(dir)
                 WRITE(EXT0_DIR_PIN,!EXT0_INVERSE);
             else
                 WRITE(EXT0_DIR_PIN,EXT0_INVERSE);
 #if FEATURE_DITTO_PRINTING
-            if(Extruder::dittoMode) {
+            if(Extruder::dittoMode)
+            {
                 if(dir)
                     WRITE(EXT1_DIR_PIN,!EXT1_INVERSE);
                 else
                     WRITE(EXT1_DIR_PIN,EXT1_INVERSE);
+#if NUM_EXTRUDER > 2
+                if(Extruder::dittoMode > 1)
+                {
+                    if(dir)
+                        WRITE(EXT2_DIR_PIN,!EXT2_INVERSE);
+                    else
+                        WRITE(EXT2_DIR_PIN,EXT2_INVERSE);
+                }
+#endif
+#if NUM_EXTRUDER > 3
+                if(Extruder::dittoMode > 2)
+                {
+                    if(dir)
+                        WRITE(EXT3_DIR_PIN,!EXT3_INVERSE);
+                    else
+                        WRITE(EXT3_DIR_PIN,EXT3_INVERSE);
+                }
+#endif
             }
 #endif
             break;
 #endif
-#if defined(EXT1_DIR_PIN) && NUM_EXTRUDER>1
+#if defined(EXT1_DIR_PIN) && NUM_EXTRUDER > 1
         case 1:
             if(dir)
                 WRITE(EXT1_DIR_PIN,!EXT1_INVERSE);
@@ -256,7 +359,7 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
                 WRITE(EXT1_DIR_PIN,EXT1_INVERSE);
             break;
 #endif
-#if defined(EXT2_DIR_PIN) && NUM_EXTRUDER>2
+#if defined(EXT2_DIR_PIN) && NUM_EXTRUDER > 2
         case 2:
             if(dir)
                 WRITE(EXT2_DIR_PIN,!EXT2_INVERSE);
@@ -264,7 +367,7 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
                 WRITE(EXT2_DIR_PIN,EXT2_INVERSE);
             break;
 #endif
-#if defined(EXT3_DIR_PIN) && NUM_EXTRUDER>3
+#if defined(EXT3_DIR_PIN) && NUM_EXTRUDER > 3
         case 3:
             if(dir)
                 WRITE(EXT3_DIR_PIN,!EXT3_INVERSE);
@@ -272,7 +375,7 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
                 WRITE(EXT3_DIR_PIN,EXT3_INVERSE);
             break;
 #endif
-#if defined(EXT4_DIR_PIN) && NUM_EXTRUDER>4
+#if defined(EXT4_DIR_PIN) && NUM_EXTRUDER > 4
         case 4:
             if(dir)
                 WRITE(EXT4_DIR_PIN,!EXT4_INVERSE);
@@ -280,7 +383,7 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
                 WRITE(EXT4_DIR_PIN,EXT4_INVERSE);
             break;
 #endif
-#if defined(EXT5_DIR_PIN) && NUM_EXTRUDER>5
+#if defined(EXT5_DIR_PIN) && NUM_EXTRUDER > 5
         case 5:
             if(dir)
                 WRITE(EXT5_DIR_PIN,!EXT5_INVERSE);
@@ -291,31 +394,42 @@ class Extruder   // Size: 12*1 Byte+12*4 Byte+4*2Byte = 68 Byte
         }
 #endif
     }
+
     static inline void enable()
     {
-#if NUM_EXTRUDER==1
-#if EXT0_ENABLE_PIN>-1
+#if NUM_EXTRUDER == 1
+#if EXT0_ENABLE_PIN > -1
         WRITE(EXT0_ENABLE_PIN,EXT0_ENABLE_ON );
 #endif
 #else
         if(Extruder::current->enablePin > -1)
             digitalWrite(Extruder::current->enablePin,Extruder::current->enableOn);
 #if FEATURE_DITTO_PRINTING
-        if(Extruder::dittoMode) {
+        if(Extruder::dittoMode)
+        {
             if(extruder[1].enablePin > -1)
                 digitalWrite(extruder[1].enablePin,extruder[1].enableOn);
 #if NUM_EXTRUDER > 2
-        if(Extruder::dittoMode > 1 && extruder[2].enablePin > -1)
+            if(Extruder::dittoMode > 1 && extruder[2].enablePin > -1)
                 digitalWrite(extruder[2].enablePin,extruder[2].enableOn);
 #endif
 #if NUM_EXTRUDER > 3
-        if(Extruder::dittoMode > 2 && extruder[3].enablePin > -1)
+            if(Extruder::dittoMode > 2 && extruder[3].enablePin > -1)
                 digitalWrite(extruder[3].enablePin,extruder[3].enableOn);
 #endif
         }
 #endif
 #endif
     }
+#endif
+#if FEATURE_RETRACTION
+    inline bool isRetracted() {return (flags & EXTRUDER_FLAG_RETRACTED) != 0;}
+    inline void setRetracted(bool on) {
+        flags = (flags & (255 - EXTRUDER_FLAG_RETRACTED)) | (on ? EXTRUDER_FLAG_RETRACTED : 0);
+    }
+    void retract(bool isRetract,bool isLong);
+    void retractDistance(float dist);
+#endif
     static void manageTemperatures();
     static void disableCurrentExtruderMotor();
     static void disableAllExtruderMotors();

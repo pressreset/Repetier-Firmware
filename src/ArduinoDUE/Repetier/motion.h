@@ -437,7 +437,9 @@ public:
     {
         linesCount = 0;
         linesPos = linesWritePos;
+        Printer::setMenuMode(MENU_MODE_PRINTING,false);
     }
+    // Only called from bresenham -> inside interrupt handle
     inline void updateAdvanceSteps(speed_t v,uint8_t max_loops,bool accelerate)
     {
 #if USE_ADVANCE
@@ -456,24 +458,24 @@ public:
             if(advanceTarget<advanceEnd)
                 advanceTarget = advanceEnd;
         }
-        long h = HAL::mulu16xu16to32(v,advanceL);
+        long h = HAL::mulu16xu16to32(v, advanceL);
         int tred = ((advanceTarget + h) >> 16);
         HAL::forbidInterrupts();
         Printer::extruderStepsNeeded += tred-Printer::advanceStepsSet;
-        if(tred>0 && Printer::advanceStepsSet<=0)
+        if(tred > 0 && Printer::advanceStepsSet <= 0)
             Printer::extruderStepsNeeded += Extruder::current->advanceBacklash;
-        else if(tred<0 && Printer::advanceStepsSet>=0)
+        else if(tred < 0 && Printer::advanceStepsSet >= 0)
             Printer::extruderStepsNeeded -= Extruder::current->advanceBacklash;
         Printer::advanceStepsSet = tred;
         HAL::allowInterrupts();
         Printer::advanceExecuted = advanceTarget;
 #else
-        int tred = HAL::mulu6xu16shift16(v,advanceL);
+        int tred = HAL::mulu6xu16shift16(v, advanceL);
         HAL::forbidInterrupts();
         Printer::extruderStepsNeeded += tred - Printer::advanceStepsSet;
-        if(tred>0 && Printer::advanceStepsSet<=0)
+        if(tred > 0 && Printer::advanceStepsSet <= 0)
             Printer::extruderStepsNeeded += (Extruder::current->advanceBacklash << 1);
-        else if(tred<0 && Printer::advanceStepsSet>=0)
+        else if(tred < 0 && Printer::advanceStepsSet >= 0)
             Printer::extruderStepsNeeded -= (Extruder::current->advanceBacklash << 1);
         Printer::advanceStepsSet = tred;
         HAL::allowInterrupts();
@@ -634,10 +636,11 @@ public:
         PrintLine::nlFlag = true;
 #endif
     }
+    // Only called from within interrupts
     static inline void removeCurrentLineForbidInterrupt()
     {
         linesPos++;
-        if(linesPos>=PRINTLINE_CACHE_SIZE) linesPos=0;
+        if(linesPos >= PRINTLINE_CACHE_SIZE) linesPos=0;
         cur = NULL;
 #if CPU_ARCH==ARCH_ARM
         nlFlag = false;
@@ -650,11 +653,14 @@ public:
     static inline void pushLine()
     {
         linesWritePos++;
-        if(linesWritePos>=PRINTLINE_CACHE_SIZE) linesWritePos = 0;
+        if(linesWritePos >= PRINTLINE_CACHE_SIZE) linesWritePos = 0;
         Printer::setMenuMode(MENU_MODE_PRINTING,true);
-        BEGIN_INTERRUPT_PROTECTED
+        InterruptProtectedBlock noInts;
         linesCount++;
-        END_INTERRUPT_PROTECTED
+    }
+    static uint8_t getLinesCount() {
+        InterruptProtectedBlock noInts;
+        return linesCount;
     }
     static PrintLine *getNextWriteLine()
     {
@@ -662,7 +668,7 @@ public:
     }
     static inline void computeMaxJunctionSpeed(PrintLine *previous,PrintLine *current);
     static int32_t bresenhamStep();
-    static void waitForXFreeLines(uint8_t b=1);
+    static void waitForXFreeLines(uint8_t b=1, bool allowMoves = false);
     static inline void forwardPlanner(uint8_t p);
     static inline void backwardPlanner(uint8_t p,uint8_t last);
     static void updateTrapezoids();
@@ -683,13 +689,13 @@ public:
     }
 #if NONLINEAR_SYSTEM
     static uint8_t queueDeltaMove(uint8_t check_endstops,uint8_t pathOptimize, uint8_t softEndstop);
-    static inline void queueEMove(long e_diff,uint8_t check_endstops,uint8_t pathOptimize);
+    static inline void queueEMove(int32_t e_diff,uint8_t check_endstops,uint8_t pathOptimize);
     inline uint16_t calculateDeltaSubSegments(uint8_t softEndstop);
-    static inline void calculateDirectionAndDelta(long difference[], flag8_t *dir, long delta[]);
+    static inline void calculateDirectionAndDelta(int32_t difference[], flag8_t *dir, int32_t delta[]);
     static inline uint8_t calculateDistance(float axis_diff[], uint8_t dir, float *distance);
 #if SOFTWARE_LEVELING && DRIVE_SYSTEM == DELTA
-    static void calculatePlane(long factors[], long p1[], long p2[], long p3[]);
-    static float calcZOffset(long factors[], long pointX, long pointY);
+    static void calculatePlane(int32_t factors[], int32_t p1[], int32_t p2[], int32_t p3[]);
+    static float calcZOffset(int32_t factors[], int32_t pointX, int32_t pointY);
 #endif
 #endif
 };

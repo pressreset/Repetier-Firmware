@@ -22,7 +22,7 @@
 #ifndef _REPETIER_H
 #define _REPETIER_H
 
-#define REPETIER_VERSION "0.92 Develop"
+//#define REPETIER_VERSION "0.92.2"
 
 // ##########################################################################################
 // ##                                  Debug configuration                                 ##
@@ -35,7 +35,7 @@ enum debugFlags {DEB_ECHO= 0x1, DEB_INFO=0x2, DEB_ERROR =0x4,DEB_DRYRUN=0x8,
 //#define DEBUG_QUEUE_MOVE
 /** Allows M111 to set bit 5 (16) which disables all commands except M111. This can be used
 to test your data througput or search for communication problems. */
-#define INCLUDE_DEBUG_COMMUNICATION 0
+#define INCLUDE_DEBUG_COMMUNICATION 1
 /** Allows M111 so set bit 6 (32) which disables moves, at the first tried step. In combination
 with a dry run, you can test the speed of path computations, which are still performed. */
 #define INCLUDE_DEBUG_NO_MOVE 1
@@ -70,6 +70,8 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #define BIPOD 5
 #define XZ_GANTRY 8
 #define ZX_GANTRY 9
+
+#define WIZARD_STACK_SIZE 8
 
 // Uncomment if no analyzer is connected
 //#define ANALYZER
@@ -112,7 +114,11 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 // Bits of the ADC converter
 #define ANALOG_INPUT_BITS 10
 // Build median from 2^ANALOG_INPUT_SAMPLE samples
+#if CPU_ARCH == ARCH_AVR
 #define ANALOG_INPUT_SAMPLE 5
+#else
+#define ANALOG_INPUT_SAMPLE 4
+#endif
 #define ANALOG_REF_AREF 0
 #define ANALOG_REF_AVCC _BV(REFS0)
 #define ANALOG_REF_INT_1_1 _BV(REFS1)
@@ -149,6 +155,8 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #define CONTROLLER_RAMBO 13
 #define CONTROLLER_OPENHARDWARE_LCD2004 14
 #define CONTROLLER_SANGUINOLOLU_PANELOLU2 15
+#define CONTROLLER_GAMEDUINO2 16
+#define CONTROLLER_MIREGLI 17
 
 //direction flags
 #define X_DIRPOS 1
@@ -176,6 +184,8 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 
 #include "Configuration.h"
 
+#define GCODE_BUFFER_SIZE 1
+
 #ifndef FEATURE_BABYSTEPPING
 #define FEATURE_BABYSTEPPING 0
 #define BABYSTEP_MULTIPLICATOR 1
@@ -190,7 +200,7 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #define SPEED_MAX_MILLIS 50
 #define SPEED_MAGNIFICATION 100.0f
 
-#define SOFTWARE_LEVELING (FEATURE_SOFTWARE_LEVELING && (DRIVE_SYSTEM==DELTA))
+//#define SOFTWARE_LEVELING (FEATURE_SOFTWARE_LEVELING && (DRIVE_SYSTEM==DELTA))
 /**  \brief Horizontal distance bridged by the diagonal push rod when the end effector is in the center. It is pretty close to 50% of the push rod length (250 mm).
 */
 #define ROD_RADIUS (PRINTER_RADIUS-END_EFFECTOR_HORIZONTAL_OFFSET-CARRIAGE_HORIZONTAL_OFFSET)
@@ -220,6 +230,22 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #endif
 //After this count of steps a new SIN / COS caluclation is startet to correct the circle interpolation
 #define N_ARC_CORRECTION 25
+
+// Test for shared cooler
+#if NUM_EXTRUDER == 6 && EXT0_EXTRUDER_COOLER_PIN > -1 && EXT0_EXTRUDER_COOLER_PIN == EXT1_EXTRUDER_COOLER_PIN && EXT2_EXTRUDER_COOLER_PIN == EXT3_EXTRUDER_COOLER_PIN && EXT4_EXTRUDER_COOLER_PIN == EXT5_EXTRUDER_COOLER_PIN && EXT0_EXTRUDER_COOLER_PIN == EXT2_EXTRUDER_COOLER_PIN && EXT0_EXTRUDER_COOLER_PIN == EXT4_EXTRUDER_COOLER_PIN
+#define SHARED_COOLER 1
+#elif NUM_EXTRUDER == 5 && EXT0_EXTRUDER_COOLER_PIN > -1 && EXT0_EXTRUDER_COOLER_PIN == EXT1_EXTRUDER_COOLER_PIN && EXT2_EXTRUDER_COOLER_PIN == EXT3_EXTRUDER_COOLER_PIN && EXT3_EXTRUDER_COOLER_PIN == EXT5_EXTRUDER_COOLER_PIN && EXT0_EXTRUDER_COOLER_PIN == EXT2_EXTRUDER_COOLER_PIN
+#define SHARED_COOLER 1
+#elif NUM_EXTRUDER == 4 && EXT0_EXTRUDER_COOLER_PIN > -1 && EXT0_EXTRUDER_COOLER_PIN == EXT1_EXTRUDER_COOLER_PIN && EXT2_EXTRUDER_COOLER_PIN == EXT3_EXTRUDER_COOLER_PIN && EXT0_EXTRUDER_COOLER_PIN == EXT2_EXTRUDER_COOLER_PIN
+#define SHARED_COOLER 1
+#elif NUM_EXTRUDER == 3 && EXT0_EXTRUDER_COOLER_PIN > -1 && EXT0_EXTRUDER_COOLER_PIN == EXT1_EXTRUDER_COOLER_PIN && EXT2_EXTRUDER_COOLER_PIN == EXT0_EXTRUDER_COOLER_PIN
+#define SHARED_COOLER 1
+#elif NUM_EXTRUDER == 2 && EXT0_EXTRUDER_COOLER_PIN > -1 && EXT0_EXTRUDER_COOLER_PIN == EXT1_EXTRUDER_COOLER_PIN
+#define SHARED_COOLER 1
+#else
+#define SHARED_COOLER 0
+#endif
+
 
 #if NUM_EXTRUDER>0 && EXT0_TEMPSENSOR_TYPE<101
 #define EXT0_ANALOG_INPUTS 1
@@ -257,7 +283,7 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #define EXT2_ANALOG_CHANNEL
 #endif
 
-#if NUM_EXTRUDER>3 && EXT3_TEMPSENSOR_TYPE<101
+#if NUM_EXTRUDER > 3 && EXT3_TEMPSENSOR_TYPE < 101
 #define EXT3_ANALOG_INPUTS 1
 #define EXT3_SENSOR_INDEX EXT0_ANALOG_INPUTS+EXT1_ANALOG_INPUTS+EXT2_ANALOG_INPUTS
 #define EXT3_ANALOG_CHANNEL ACCOMMA2 EXT3_TEMPSENSOR_PIN
@@ -269,7 +295,7 @@ usage or for seraching for memory induced errors. Switch it off for production, 
 #define EXT3_ANALOG_CHANNEL
 #endif
 
-#if NUM_EXTRUDER>4 && EXT4_TEMPSENSOR_TYPE<101
+#if NUM_EXTRUDER > 4 && EXT4_TEMPSENSOR_TYPE < 101
 #define EXT4_ANALOG_INPUTS 1
 #define EXT4_SENSOR_INDEX EXT0_ANALOG_INPUTS+EXT1_ANALOG_INPUTS+EXT2_ANALOG_INPUTS+EXT3_ANALOG_INPUTS
 #define EXT4_ANALOG_CHANNEL ACCOMMA3 EXT4_TEMPSENSOR_PIN
@@ -403,8 +429,12 @@ public:
         return a;
     }
     static inline unsigned long absLong(long a)          {return a >= 0 ? a : -a;}
-    static inline long sqr(long a) {return a*a;}
-    static inline unsigned long sqr(unsigned long a) {return a*a;}
+    static inline int32_t sqr(int32_t a) {return a*a;}
+    static inline uint32_t sqr(uint32_t a) {return a*a;}
+#ifdef SUPPORT_64_BIT_MATH
+    static inline int64_t sqr(int64_t a) {return a*a;}
+    static inline uint64_t sqr(uint64_t a) {return a*a;}
+#endif
 
     static inline float sqr(float a) {return a*a;}
 };
@@ -491,7 +521,7 @@ public:
   //char fullName[13*SD_MAX_FOLDER_DEPTH+13]; // Fill name
   char *shortname; // Pointer to start of filename itself
   char *pathend; // File to char where pathname in fullname ends
-  bool sdmode;  // true if we are printing from sd card
+  uint8_t sdmode;  // true if we are printing from sd card, 2 = stop accepting new commands
   bool sdactive;
   //int16_t n;
   bool savetosd;
@@ -500,7 +530,7 @@ public:
   SDCard();
   void initsd();
   void writeCommand(GCode *code);
-  bool selectFile(char *filename,bool silent=false);
+  bool selectFile(const char *filename,bool silent=false);
   void mount();
   void unmount();
   void startPrint();
@@ -546,8 +576,10 @@ extern int debugWaitLoop;
 
 #if CPU_ARCH == ARCH_AVR
 #define DELAY1MICROSECOND        __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t")
+#define DELAY2MICROSECOND        __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\tnop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t")
 #else
 #define DELAY1MICROSECOND     HAL::delayMicroseconds(1);
+#define DELAY2MICROSECOND     HAL::delayMicroseconds(2);
 #endif
 
 #ifdef FAST_INTEGER_SQRT

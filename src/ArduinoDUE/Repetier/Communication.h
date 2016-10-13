@@ -79,9 +79,10 @@ FSTRINGVAR(tSpaceRaw)
 FSTRINGVAR(tSpaceAt)
 FSTRINGVAR(tSpaceBAtColon)
 FSTRINGVAR(tColon)
-FSTRINGVAR(tSpeedMultiply);
-FSTRINGVAR(tFlowMultiply);
-FSTRINGVAR(tFanspeed);
+FSTRINGVAR(tSpeedMultiply)
+FSTRINGVAR(tFlowMultiply)
+FSTRINGVAR(tHorizontalRadius)
+FSTRINGVAR(tFanspeed)
 FSTRINGVAR(tPrintedFilament)
 FSTRINGVAR(tPrintingTime)
 FSTRINGVAR(tSpacem)
@@ -97,7 +98,9 @@ FSTRINGVAR(tE0Colon)
 FSTRINGVAR(tE1Colon)
 FSTRINGVAR(tMS1MS2Pins)
 FSTRINGVAR(tSetOutputSpace)
+FSTRINGVAR(tGetInputSpace)
 FSTRINGVAR(tSpaceToSpace)
+FSTRINGVAR(tSpaceIsSpace)
 FSTRINGVAR(tHSpace)
 FSTRINGVAR(tLSpace)
 FSTRINGVAR(tXMinColon)
@@ -207,6 +210,7 @@ FSTRINGVAR(tDBGMissedSteps)
 #endif
 #if FEATURE_Z_PROBE
 FSTRINGVAR(tZProbe)
+FSTRINGVAR(tZProbeSteps)
 FSTRINGVAR(tZProbeState)
 FSTRINGVAR(tZProbeStartScript)
 FSTRINGVAR(tZProbeEndScript)
@@ -218,6 +222,7 @@ FSTRINGVAR(tZProbeBedDitance)
 FSTRINGVAR(tAutolevelReset)
 FSTRINGVAR(tAutolevelEnabled)
 FSTRINGVAR(tAutolevelDisabled)
+FSTRINGVAR(tTransformationMatrix)
 FSTRINGVAR(tZProbeFailed)
 FSTRINGVAR(tZProbeMax)
 FSTRINGVAR(tZProbePrinterHeight)
@@ -245,16 +250,21 @@ FSTRINGVAR(tZProbeY3)
 #if FEATURE_AUTOLEVEL
 FSTRINGVAR(tAutolevelActive)
 #endif
+#if FEATURE_AXISCOMP
+FSTRINGVAR(tAxisCompTanXY)
+FSTRINGVAR(tAxisCompTanYZ)
+FSTRINGVAR(tAxisCompTanXZ)
+#endif
 FSTRINGVAR(tConfigStoredEEPROM)
 FSTRINGVAR(tConfigLoadedEEPROM)
 FSTRINGVAR(tEPRConfigResetDefaults)
 FSTRINGVAR(tEPRProtocolChanged)
-FSTRINGVAR(tExtrDot)
 FSTRINGVAR(tEPR0)
 FSTRINGVAR(tEPR1)
 FSTRINGVAR(tEPR2)
 FSTRINGVAR(tEPR3)
 FSTRINGVAR(tEPRBaudrate)
+FSTRINGVAR(tEPRAdvancedUser)
 FSTRINGVAR(tEPRFilamentPrinted)
 FSTRINGVAR(tEPRPrinterActive)
 FSTRINGVAR(tEPRMaxInactiveTime)
@@ -351,9 +361,31 @@ FSTRINGVAR(tDirectoryCreated)
 FSTRINGVAR(tCreationFailed)
 FSTRINGVAR(tSDErrorCode)
 #endif // SDSUPPORT
+FSTRINGVAR(tHeaterDecoupled)
+FSTRINGVAR(tHeaterDecoupledWarning)
+#if DISTORTION_CORRECTION
+FSTRINGVAR(tZCorrectionEnabled)
+FSTRINGVAR(tZCorrectionDisabled)
+#endif
+#if FEATURE_RETRACTION
+FSTRINGVAR(tEPRAutoretractEnabled)
+FSTRINGVAR(tEPRRetractionLength)
+FSTRINGVAR(tEPRRetractionLongLength)
+FSTRINGVAR(tEPRRetractionSpeed)
+FSTRINGVAR(tEPRRetractionZLift)
+FSTRINGVAR(tEPRRetractionUndoExtraLength)
+FSTRINGVAR(tEPRRetractionUndoExtraLongLength)
+FSTRINGVAR(tEPRRetractionUndoSpeed)
+#endif
+FSTRINGVAR(tConfig)
+FSTRINGVAR(tExtrDot)
 
-
-
+static void config(FSTRINGPARAM(text));
+static void config(FSTRINGPARAM(text),int value);
+static void config(FSTRINGPARAM(text),const char *msg);
+static void config(FSTRINGPARAM(text),int32_t value);
+static void config(FSTRINGPARAM(text),uint32_t value);
+static void config(FSTRINGPARAM(text),float value,uint8_t digits=2);
 static void printNumber(uint32_t n);
 static void printWarningF(FSTRINGPARAM(text));
 static void printInfoF(FSTRINGPARAM(text));

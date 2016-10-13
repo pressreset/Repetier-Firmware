@@ -21,16 +21,16 @@
 
 #include "Repetier.h"
 
-#if DRIVE_SYSTEM==DELTA
-FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_" REPETIER_VERSION " FIRMWARE_URL:https://github.com/repetier/Repetier-Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Delta EXTRUDER_COUNT:" XSTR(NUM_EXTRUDER) " REPETIER_PROTOCOL:2")
+#if DRIVE_SYSTEM == DELTA
+FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_"REPETIER_VERSION" FIRMWARE_DATE:"FIRMWARE_DATE" MACHINE_TYPE:"UI_TEXT_PRINTER_READY" ")
 #else
-#if DRIVE_SYSTEM==CARTESIAN
-FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_" REPETIER_VERSION " FIRMWARE_URL:https://github.com/repetier/Repetier-Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:" XSTR(NUM_EXTRUDER) " REPETIER_PROTOCOL:2")
+#if DRIVE_SYSTEM == CARTESIAN
+FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_" REPETIER_VERSION " FIRMWARE_URL:https://github.com/repetier/Repetier-Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:" XSTR(NUM_EXTRUDER) " REPETIER_PROTOCOL:3")
 #else
-FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_" REPETIER_VERSION " FIRMWARE_URL:https://github.com/repetier/Repetier-Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Core_XY EXTRUDER_COUNT:" XSTR(NUM_EXTRUDER) " REPETIER_PROTOCOL:2")
+FSTRINGVALUE(Com::tFirmware,"FIRMWARE_NAME:Repetier_" REPETIER_VERSION " FIRMWARE_URL:https://github.com/repetier/Repetier-Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Core_XY EXTRUDER_COUNT:" XSTR(NUM_EXTRUDER) " REPETIER_PROTOCOL:3")
 #endif
 #endif
-FSTRINGVALUE(Com::tDebug,"Debug:");
+FSTRINGVALUE(Com::tDebug,"Debug:")
 FSTRINGVALUE(Com::tOk,"ok")
 FSTRINGVALUE(Com::tNewline,"\r\n")
 FSTRINGVALUE(Com::tNAN,"NAN")
@@ -85,6 +85,7 @@ FSTRINGVALUE(Com::tSlash,"/")
 FSTRINGVALUE(Com::tSpaceSlash," /")
 FSTRINGVALUE(Com::tSpeedMultiply,"SpeedMultiply:")
 FSTRINGVALUE(Com::tFlowMultiply,"FlowMultiply:")
+FSTRINGVALUE(Com::tHorizontalRadius,"H. Radius:")
 FSTRINGVALUE(Com::tFanspeed,"Fanspeed:")
 FSTRINGVALUE(Com::tPrintedFilament,"Printed filament:")
 FSTRINGVALUE(Com::tPrintingTime,"Printing time:")
@@ -100,8 +101,10 @@ FSTRINGVALUE(Com::tZColon,"Z:")
 FSTRINGVALUE(Com::tE0Colon,"E0:")
 FSTRINGVALUE(Com::tE1Colon,"E1:")
 FSTRINGVALUE(Com::tMS1MS2Pins,"MS1,MS2 Pins")
-FSTRINGVALUE(Com::tSetOutputSpace,"Set output ")
+FSTRINGVALUE(Com::tSetOutputSpace,"Set output: ")
+FSTRINGVALUE(Com::tGetInputSpace,"Get Input: ")
 FSTRINGVALUE(Com::tSpaceToSpace," to ")
+FSTRINGVALUE(Com::tSpaceIsSpace," is ")
 FSTRINGVALUE(Com::tHSpace,"H ")
 FSTRINGVALUE(Com::tLSpace,"L ")
 FSTRINGVALUE(Com::tXMinColon,"x_min:")
@@ -207,6 +210,7 @@ FSTRINGVALUE(Com::tDBGMissedSteps,"Missed steps:")
 #endif // DEBUG_STEPCOUNT
 #if FEATURE_Z_PROBE
 FSTRINGVALUE(Com::tZProbe,"Z-probe:")
+FSTRINGVALUE(Com::tZProbeSteps," Step Variation from Probe to bed Distance:")
 FSTRINGVALUE(Com::tZProbeAverage,"Z-probe average height:")
 FSTRINGVALUE(Com::tZProbeZReset,"Reset Z height")
 FSTRINGVALUE(Com::tZProbeState,"Z-probe state:")
@@ -217,6 +221,7 @@ FSTRINGVALUE(Com::tHitZProbe,"Hit z-probe")
 FSTRINGVALUE(Com::tAutolevelReset,"Autolevel matrix reset")
 FSTRINGVALUE(Com::tAutolevelEnabled,"Autoleveling enabled")
 FSTRINGVALUE(Com::tAutolevelDisabled,"Autoleveling disabled")
+FSTRINGVALUE(Com::tTransformationMatrix,"Transformation matrix:")
 FSTRINGVALUE(Com::tZProbeFailed,"Z-probe failed")
 FSTRINGVALUE(Com::tZProbeMax,"Z-probe max:")
 FSTRINGVALUE(Com::tZProbePrinterHeight,"Printer height:")
@@ -224,7 +229,7 @@ FSTRINGVALUE(Com::tZProbePrinterHeight,"Printer height:")
 #ifdef WAITING_IDENTIFIER
 FSTRINGVALUE(Com::tWait,WAITING_IDENTIFIER)
 #endif // WAITING_IDENTIFIER
-#if EEPROM_MODE==0
+#if EEPROM_MODE == 0
 FSTRINGVALUE(Com::tNoEEPROMSupport,"No EEPROM support compiled.\r\n")
 #else
 #if FEATURE_Z_PROBE
@@ -241,6 +246,12 @@ FSTRINGVALUE(Com::tZProbeY2,"Z-probe Y2")
 FSTRINGVALUE(Com::tZProbeX3,"Z-probe X3")
 FSTRINGVALUE(Com::tZProbeY3,"Z-probe Y3")
 #endif
+#if FEATURE_AXISCOMP
+FSTRINGVALUE(Com::tAxisCompTanXY,"tanXY Axis Compensation")
+FSTRINGVALUE(Com::tAxisCompTanYZ,"tanYZ Axis Compensation")
+FSTRINGVALUE(Com::tAxisCompTanXZ,"tanXZ Axis Compensation")
+#endif
+
 #if FEATURE_AUTOLEVEL
 FSTRINGVALUE(Com::tAutolevelActive,"Autolevel active (1/0)")
 #endif
@@ -248,12 +259,12 @@ FSTRINGVALUE(Com::tConfigStoredEEPROM,"Configuration stored to EEPROM.")
 FSTRINGVALUE(Com::tConfigLoadedEEPROM,"Configuration loaded from EEPROM.")
 FSTRINGVALUE(Com::tEPRConfigResetDefaults,"Configuration reset to defaults.")
 FSTRINGVALUE(Com::tEPRProtocolChanged,"Protocol version changed, upgrading")
-FSTRINGVALUE(Com::tExtrDot,"Extr.")
 FSTRINGVALUE(Com::tEPR0,"EPR:0 ")
 FSTRINGVALUE(Com::tEPR1,"EPR:1 ")
 FSTRINGVALUE(Com::tEPR2,"EPR:2 ")
 FSTRINGVALUE(Com::tEPR3,"EPR:3 ")
 FSTRINGVALUE(Com::tEPRBaudrate,"Baudrate")
+FSTRINGVALUE(Com::tEPRAdvancedUser, "Advanced User")
 FSTRINGVALUE(Com::tEPRFilamentPrinted,"Filament printed [m]")
 FSTRINGVALUE(Com::tEPRPrinterActive,"Printer active [s]")
 FSTRINGVALUE(Com::tEPRMaxInactiveTime,"Max. inactive time [ms,0=off]")
@@ -364,7 +375,51 @@ FSTRINGVALUE(Com::tDirectoryCreated,"Directory created")
 FSTRINGVALUE(Com::tCreationFailed,"Creation failed")
 FSTRINGVALUE(Com::tSDErrorCode,"SD errorCode:")
 #endif // SDSUPPORT
+FSTRINGVALUE(Com::tHeaterDecoupled,"Heater decoupled")
+FSTRINGVALUE(Com::tHeaterDecoupledWarning,"One heater seems decoupled from thermistor - disabling all for safety!")
+#if DISTORTION_CORRECTION
+FSTRINGVALUE(Com::tZCorrectionEnabled,"Z correction enabled")
+FSTRINGVALUE(Com::tZCorrectionDisabled,"Z correction disabled")
+#endif
+#if FEATURE_RETRACTION
+FSTRINGVALUE(Com::tEPRAutoretractEnabled,"Enable retraction conversion [0/1]")
+FSTRINGVALUE(Com::tEPRRetractionLength,"Retraction length [mm]")
+FSTRINGVALUE(Com::tEPRRetractionLongLength,"Retraction length extruder switch [mm]")
+FSTRINGVALUE(Com::tEPRRetractionSpeed,"Retraction speed [mm/s]")
+FSTRINGVALUE(Com::tEPRRetractionZLift,"Retraction z-lift [mm]")
+FSTRINGVALUE(Com::tEPRRetractionUndoExtraLength,"Extra extrusion on undo retract [mm]")
+FSTRINGVALUE(Com::tEPRRetractionUndoExtraLongLength,"Extra extrusion on undo switch retract [mm]")
+FSTRINGVALUE(Com::tEPRRetractionUndoSpeed,"Retraction undo speed")
+#endif
+FSTRINGVALUE(Com::tConfig,"Config:")
+FSTRINGVALUE(Com::tExtrDot,"Extr.")
 
+void Com::config(FSTRINGPARAM(text)) {
+    printF(tConfig);
+    printFLN(text);
+}
+void Com::config(FSTRINGPARAM(text),int value) {
+    printF(tConfig);
+    printFLN(text,value);
+}
+void Com::config(FSTRINGPARAM(text),const char *msg) {
+    printF(tConfig);
+    printF(text);
+    print(msg);
+    println();
+}
+void Com::config(FSTRINGPARAM(text),int32_t value){
+    printF(tConfig);
+    printFLN(text,value);
+}
+void Com::config(FSTRINGPARAM(text),uint32_t value){
+    printF(tConfig);
+    printFLN(text,value);
+}
+void Com::config(FSTRINGPARAM(text),float value,uint8_t digits){
+    printF(tConfig);
+    printFLN(text,value,digits);
+}
 void Com::printWarningF(FSTRINGPARAM(text)) {
     printF(tWarning);
     printF(text);

@@ -798,7 +798,7 @@ int8_t SdBaseFile::lsPrintNext(uint8_t flags, uint8_t indent) {
 }
 //------------------------------------------------------------------------------
 // format directory name field from a 8.3 name string
-FSTRINGVALUE(illegalFileChars,"|<>^+=?/[];,*\"\\");
+FSTRINGVALUE(illegalFileChars,"|<>^+=?/[];,*\"\\")
 bool SdBaseFile::make83Name(const char* str, uint8_t* name, const char** ptr) {
   uint8_t c;
   uint8_t n = 7;  // max index for part before dot
@@ -3350,7 +3350,7 @@ bool Sd2Card::init(uint8_t sckRateID, uint8_t chipSelectPin) {
 #endif  // SOFTWARE_SPI
 
   // must supply min of 74 clock cycles with CS high.
-  for (uint8_t i = 0; i < 10; i++) spiSend(0XFF);
+  for (uint8_t i = 0; i < 20; i++) spiSend(0XFF);
 
   // command to go idle in SPI mode
   while (cardCommand(CMD0, 0) != R1_IDLE_STATE) {

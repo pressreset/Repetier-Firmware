@@ -19,6 +19,26 @@
     which based on Tonokip RepRap firmware rewrite based off of Hydra-mmm firmware.
 */
 
+/**
+
+Coordinate system transformations:
+
+Level 1: G-code => Coordinates like send via g-codes.
+
+Level 2: Real coordinates => Coordinates corrected by coordinate shift via G92
+         currentPosition and lastCmdPos are from this level.
+Level 3: Transformed and shifter => Include extruder offset and bed rotation.
+         These variables are only stored temporary.
+
+Level 4: Step position => Level 3 converted into steps for motor position
+        currentPositionSteps and destinationPositionSteps are from this level.
+
+Level 5: Nonlinear motor step position, only for nonlinear drive systems
+         destinationDeltaSteps
+
+
+*/
+
 #ifndef PRINTER_H_INCLUDED
 #define PRINTER_H_INCLUDED
 
@@ -26,6 +46,28 @@ union floatLong
 {
     float f;
     uint32_t l;
+#ifdef SUPPORT_64_BIT_MATH
+    uint64_t L;
+#endif
+};
+
+union wizardVar {
+    float f;
+    int32_t l;
+    uint32_t ul;
+    int16_t i;
+    uint16_t ui;
+    int8_t c;
+    uint8_t uc;
+
+    wizardVar():i(0) {}
+    wizardVar(float _f):f(_f) {}
+    wizardVar(int32_t _f):l(_f) {}
+    wizardVar(uint32_t _f):ul(_f) {}
+    wizardVar(int16_t _f):i(_f) {}
+    wizardVar(uint16_t _f):ui(_f) {}
+    wizardVar(int8_t _f):c(_f) {}
+    wizardVar(uint8_t _f):uc(_f) {}
 };
 
 #define PRINTER_FLAG0_STEPPER_DISABLED      1
@@ -42,6 +84,10 @@ union floatLong
 #define PRINTER_FLAG1_ALLKILLED             8
 #define PRINTER_FLAG1_UI_ERROR_MESSAGE      16
 #define PRINTER_FLAG1_NO_DESTINATION_CHECK  32
+#define PRINTER_FLAG1_POWER_ON              64
+#define PRINTER_FLAG1_ALLOW_COLD_EXTRUSION  128
+#define PRINTER_FLAG2_BLOCK_RECEIVING       1
+#define PRINTER_FLAG2_AUTORETRACT           2
 
 // define an integer number of steps more than large enough to get to endstop from anywhere
 #define HOME_DISTANCE_STEPS (Printer::zMaxSteps-Printer::zMinSteps+1000)
@@ -54,10 +100,42 @@ union floatLong
 #define towerBMinSteps Printer::yMinSteps
 #define towerCMinSteps Printer::zMinSteps
 
+#if DISTORTION_CORRECTION
+class Distortion
+{
+public:
+    Distortion();
+    void init();
+    void enable(bool permanent = true);
+    void disable(bool permanent = true);
+    void measure(void);
+    int32_t correct(int32_t x, int32_t y, int32_t z) const;
+    void updateDerived();
+    void reportStatus();
+private:
+    inline int matrixIndex(fast8_t x, fast8_t y) const;
+    inline int32_t getMatrix(int index) const;
+    inline void setMatrix(int32_t val, int index);
+    bool isCorner(fast8_t i, fast8_t j) const;
+    inline int32_t extrapolatePoint(fast8_t x1, fast8_t y1, fast8_t x2, fast8_t y2) const;
+    void extrapolateCorner(fast8_t x, fast8_t y, fast8_t dx, fast8_t dy);
+    void extrapolateCorners();
+    void resetCorrection();
+// attributes
+    int32_t step;
+    int32_t radiusCorrectionSteps;
+    int32_t zStart,zEnd;
+#if !DISTORTION_PERMANENT
+    int32_t matrix[DISTORTION_CORRECTION_POINTS * DISTORTION_CORRECTION_POINTS];
+#endif
+    bool enabled;
+};
+#endif //DISTORTION_CORRECTION
+
 class Printer
 {
 public:
-#if defined(USE_ADVANCE)
+#if USE_ADVANCE
     static volatile int extruderStepsNeeded; ///< This many extruder steps are still needed, <0 = reverse steps needed.
     static uint8_t minExtruderSpeed;            ///< Timer delay for start extruder speed
     static uint8_t maxExtruderSpeed;            ///< Timer delay for end extruder speed
@@ -83,6 +161,7 @@ public:
 
     static uint8_t debugLevel;
     static uint8_t flag0,flag1; // 1 = stepper disabled, 2 = use external extruder interrupt, 4 = temp Sensor defect, 8 = homed
+    static uint8_t flag2;
     static uint8_t stepsPerTimerCall;
     static uint32_t interval;    ///< Last step duration in ticks.
     static uint32_t timer;              ///< used for acceleration/deceleration timing
@@ -92,7 +171,8 @@ public:
     static float currentPosition[Z_AXIS_ARRAY];
     static float lastCmdPos[Z_AXIS_ARRAY]; ///< Last coordinates send by gcodes
     static int32_t destinationSteps[E_AXIS_ARRAY];         ///< Target position in steps.
-    static float extrudeMultiplyError;
+    static float extrudeMultiplyError; ///< Accumulated error during extrusion
+    static float extrusionFactor; ///< Extrusion multiply factor
 #if NONLINEAR_SYSTEM
     static int32_t maxDeltaPositionSteps;
     static int32_t currentDeltaPositionSteps[E_TOWER_ARRAY];
@@ -164,13 +244,11 @@ public:
 #ifdef DEBUG_STEPCOUNT
     static long totalStepsRemaining;
 #endif
-#if FEATURE_MEMORY_POSITION
     static float memoryX;
     static float memoryY;
     static float memoryZ;
     static float memoryE;
     static float memoryF;
-#endif
 #if GANTRY
     static int8_t motorX;
     static int8_t motorYorZ;
@@ -181,6 +259,9 @@ public:
 #ifdef DEBUG_REAL_JERK
     static float maxRealJerk;
 #endif
+    static fast8_t wizardStackPos;
+    static wizardVar wizardStack[WIZARD_STACK_SIZE];
+
     static inline void setMenuMode(uint8_t mode,bool on)
     {
         if(on)
@@ -416,6 +497,45 @@ public:
     {
         flag1 = (b ? flag1 | PRINTER_FLAG1_NO_DESTINATION_CHECK : flag1 & ~PRINTER_FLAG1_NO_DESTINATION_CHECK);
     }
+    static inline uint8_t isPowerOn()
+    {
+        return flag1 & PRINTER_FLAG1_POWER_ON;
+    }
+    static inline void setPowerOn(uint8_t b)
+    {
+        flag1 = (b ? flag1 | PRINTER_FLAG1_POWER_ON : flag1 & ~PRINTER_FLAG1_POWER_ON);
+    }
+    static inline uint8_t isColdExtrusionAllowed()
+    {
+        return flag1 & PRINTER_FLAG1_ALLOW_COLD_EXTRUSION;
+    }
+    static inline void setColdExtrusionAllowed(uint8_t b)
+    {
+        flag1 = (b ? flag1 | PRINTER_FLAG1_ALLOW_COLD_EXTRUSION : flag1 & ~PRINTER_FLAG1_ALLOW_COLD_EXTRUSION);
+        if(b)
+            Com::printFLN(PSTR("Cold extrusion allowed"));
+        else
+            Com::printFLN(PSTR("Cold extrusion disallowed"));
+    }
+    static inline uint8_t isBlockingReceive()
+    {
+        return flag2 & PRINTER_FLAG2_BLOCK_RECEIVING;
+    }
+    static inline void setBlockingReceive(uint8_t b)
+    {
+        flag2 = (b ? flag2 | PRINTER_FLAG2_BLOCK_RECEIVING : flag2 & ~PRINTER_FLAG2_BLOCK_RECEIVING);
+    }
+    static inline uint8_t isAutoretract()
+    {
+        return flag2 & PRINTER_FLAG2_AUTORETRACT;
+    }
+    static inline void setAutoretract(uint8_t b)
+    {
+        flag2 = (b ? flag2 | PRINTER_FLAG2_AUTORETRACT : flag2 & ~PRINTER_FLAG2_AUTORETRACT);
+        Com::printFLN(PSTR("Autoretract:"),b);
+    }
+
+
     static inline void toggleAnimation()
     {
         setAnimation(!isAnimation());
@@ -484,12 +604,16 @@ public:
     {
         flag0 &= ~PRINTER_FLAG0_STEPPER_DISABLED;
 #if FAN_BOARD_PIN>-1
-        pwm_pos[NUM_EXTRUDER+1] = 255;
+        pwm_pos[NUM_EXTRUDER + 1] = 255;
 #endif // FAN_BOARD_PIN
     }
     static inline bool isAnyTempsensorDefect()
     {
         return (flag0 & PRINTER_FLAG0_TEMPSENSOR_DEFECT);
+    }
+    static inline void setAnyTempsensorDefect()
+    {
+        flag0 |= PRINTER_FLAG0_TEMPSENSOR_DEFECT;
     }
     static inline bool isManualMoveMode()
     {
@@ -674,7 +798,7 @@ public:
     {
         return currentPosition[Z_AXIS];
     }
-    static inline void realPosition(float &xp,float &yp,float &zp)
+    static inline void realPosition(float &xp, float &yp, float &zp)
     {
         xp = currentPosition[X_AXIS];
         yp = currentPosition[Y_AXIS];
@@ -701,7 +825,7 @@ public:
     static bool isPositionAllowed(float x,float y,float z);
     static inline int getFanSpeed()
     {
-        return (int)pwm_pos[NUM_EXTRUDER+2];
+        return (int)pwm_pos[NUM_EXTRUDER + 2];
     }
 #if NONLINEAR_SYSTEM
     static inline void setDeltaPositions(long xaxis, long yaxis, long zaxis)
@@ -727,11 +851,20 @@ public:
     static void resetTransformationMatrix(bool silent);
     static void buildTransformationMatrix(float h1,float h2,float h3);
 #endif
-#if FEATURE_MEMORY_POSITION
+#if DISTORTION_CORRECTION
+    static void measureDistortion(void);
+    static Distortion distortion;
+#endif
     static void MemoryPosition();
     static void GoToMemoryPosition(bool x,bool y,bool z,bool e,float feed);
-#endif
     static void zBabystep();
+
+    static inline void resetWizardStack() {wizardStackPos = 0;}
+    static inline void pushWizardVar(wizardVar v) {wizardStack[wizardStackPos++] = v;}
+    static inline wizardVar popWizardVar() {return wizardStack[--wizardStackPos];}
+    static void showConfiguration();
+    static void setCaseLight(bool on);
+    static void reportCaseLightStatus();
 private:
     static void homeXAxis();
     static void homeYAxis();
